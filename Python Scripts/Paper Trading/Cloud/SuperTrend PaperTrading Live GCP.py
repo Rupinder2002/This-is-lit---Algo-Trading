@@ -15,6 +15,7 @@ import csv
 import sqlite3
 
 cwd = os.getcwd()
+strategy_name = 'SuperTrend'
 print(cwd)
 
 # =============================================================================
@@ -61,11 +62,11 @@ def fetchOHLC(ticker,interval,days):
 
 def sl_price(ohlc):
     """function to calculate stop loss based on supertrends"""
-    sl = 0.4 * ohlc['st1'][-1] + 0.6 * ohlc['st2'][-1]
+    sl = ohlc['st2'][-1]
     return round(sl,1)
 
 def closest(lst, K):
-    return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K))]
+    return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K - 500))]
 
 def write_rows_csv(row):
   with open (filename, "a", newline = "") as csvfile:
@@ -302,8 +303,9 @@ p1 = 10
 p2 = 10
 m1 = 1
 m2 = 2
+count = 1
 
-filename = os.path.join(cwd,'Order Book ' + str(dt.datetime.now().date()) + '.csv')
+filename = os.path.join(cwd,strategy_name + ' Order Book ' + str(dt.datetime.now().date()) + '.csv')
 header = ord_df.columns
 
 with open (filename, "w", newline="") as csvfile:
@@ -324,9 +326,8 @@ create_tables(tokens)
 # =============================================================================
 # Deploy the startegy to run every 10 mins
 # =============================================================================
-start_minute = dt.datetime.now().minute
-count = 1
 
+start_minute = dt.datetime.now().minute
 while dt.datetime.now().time() <= dt.time(15,25):    
     kws.on_ticks = on_ticks
     kws.on_connect = on_connect

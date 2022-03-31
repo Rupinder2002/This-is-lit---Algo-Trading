@@ -20,6 +20,7 @@ import csv
 import logging
 import sqlite3
 
+strategy_name = 'SuperTrend'
 cwd = os.chdir('C:/Users/naman/OneDrive - PangeaTech/Desktop/Algo Trading')
 
 # =============================================================================
@@ -65,10 +66,9 @@ def fetchOHLC(ticker,interval,days):
 # Create function to implement the strategy
 # =============================================================================
 
-
 def sl_price(ohlc):
     """function to calculate stop loss based on supertrends"""
-    sl = 0.4 * ohlc['st1'][-1] + 0.6 * ohlc['st2'][-1]
+    sl = ohlc['st2'][-1]
     return round(sl,1)
 
 def closest(lst, K):
@@ -312,7 +312,7 @@ p2 = 10
 m1 = 1
 m2 = 2
 
-filename = 'Order Book ' + str(dt.datetime.now().date()) + '.csv'
+filename = strategy_name + ' Order Book ' + str(dt.datetime.now().date()) + '.csv'
 header = ord_df.columns
 
 with open (filename, "w", newline="") as csvfile:

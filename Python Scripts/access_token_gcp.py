@@ -2,7 +2,6 @@ from kiteconnect import KiteConnect
 from selenium import webdriver
 import time
 import os
-from pyotp import TOTP
 
 cwd = os.getcwd()
 
@@ -24,9 +23,7 @@ def autologin():
     password.send_keys(key_secret[3])
     driver.find_element_by_xpath('/html/body/div[1]/div/div[2]/div[1]/div/div/div[2]/form/div[4]/button').click()
     pin = driver.find_element_by_xpath('/html/body/div[1]/div/div[2]/div[1]/div/div/div[2]/form/div[2]/div/input')
-    totp = TOTP(key_secret[4])
-    token = totp.now()
-    pin.send_keys(token)
+    pin.send_keys(key_secret[4])
     driver.find_element_by_xpath('/html/body/div[1]/div/div[2]/div[1]/div/div/div[2]/form/div[3]/button').click()
     time.sleep(10)
     print(driver.current_url)
