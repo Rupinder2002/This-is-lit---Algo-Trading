@@ -1,0 +1,4 @@
+timestamp,tradingsymbol,price,SL,Order,Reason
+2022-04-18 11:50:01.158772,TATAPOWER,258.85,309.5,sell,Both Indicators show red
+2022-04-18 11:50:03.033035,BHEL,54.2,104.25,sell,Both Indicators show red
+2022-04-18 11:50:08.211894,BHEL,54.2,,buy,Target Achieved
