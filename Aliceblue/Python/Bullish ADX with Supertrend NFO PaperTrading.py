@@ -11,7 +11,7 @@ import time
 import csv
 import sys
 
-os.chdir('C:/Users/naman/OneDrive - PangeaTech/Desktop/Algo Trading/Aliceblue')
+#os.chdir('C:/Users/naman/OneDrive - PangeaTech/Desktop/Algo Trading/Aliceblue')
 cwd = os.getcwd()
 
 strategy_name = 'Bullish ADX with Supertrend'
@@ -28,7 +28,7 @@ def telegram_bot_sendmessage(message):
     
     requests.get(send_message)
 
-#telegram_bot_sendmessage(message = '------New Trading Session Started------')
+telegram_bot_sendmessage(message = '------New Trading Session Started------')
 #telegram_bot_sendmessage(message = 'Strategy Running Today: ' + strategy_name)
 
 def write_rows_csv(row):
@@ -193,7 +193,7 @@ def run_strategy(ticker_list, exchange, sl_pct = 0.2,quantity = 25):
             price = ticks[ticker]['LTP']
             ticker_signal = ohlc.iloc[-1]['signal']
             
-            if dt.datetime.now().time() < dt.time(15,16):
+            if dt.datetime.now().time() < dt.time(14,1):
 
                 if ticker not in active_tickers and ticker_signal == 'buy':
     
@@ -242,10 +242,10 @@ def place_sl_target_order(ticks, target_pct = 0.5, quantity = 25):
                 stop_loss = ord_df[(ord_df["tradingsymbol"]==ticker)].iloc[-1]['SL']
                 price = ord_df[ord_df["tradingsymbol"]==ticker]["price"].values[0]
 
-                if dt.datetime.now().hour == 15 and dt.datetime.now().minute == 16 and last_trade['Order'] == 'buy':
+                if dt.datetime.now().hour == 15 and dt.datetime.now().minute == 14 and last_trade['Order'] == 'buy':
                         
                     #placeOrder(ticker, 'sell', quantity)
-                    reason = '3:16 Exit'
+                    reason = '3:14 Exit'
                     trade = pd.DataFrame([[dt.datetime.now(),ticker,tick_ltp,None,'sell',reason]],columns = ord_df.columns)
                     ord_df = pd.concat([ord_df,trade])
                     active_tickers.remove(ticker)
@@ -317,17 +317,19 @@ with open (filename, "w", newline="") as csvfile:
 alice = login()
 NFO_SCRIPT_LIST = get_nfo_scripts('NSE','Nifty Bank')
 alice = subscribe_to_live_feed(alice, 'NFO', NFO_SCRIPT_LIST)
+time.sleep(30)
 
 # =============================================================================
 # Deploy the startegy to run every 10 mins
 # =============================================================================
+
 start_minute = dt.datetime.now().minute
 
 while True:
     now = dt.datetime.now()
-    if now.hour >= 9 and now.time() <= dt.time(15,16):
+    if now.hour >= 9 and now.time() <= dt.time(15,14):
         on_ticks(ticks,NFO_SCRIPT_LIST,'NFO')
-    if now.time() >= dt.time(15,16):
+    if now.time() >= dt.time(15,14):
         sys.exit()
 
 telegram_bot_sendmessage('----Session Ended----')
