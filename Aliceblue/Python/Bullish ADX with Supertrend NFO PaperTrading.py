@@ -15,7 +15,7 @@ import sys
 cwd = os.getcwd()
 
 strategy_name = 'Bullish ADX with Supertrend'
- 
+
 # =============================================================================
 # Send Alerts on Telegram (DE Functions)
 # =============================================================================
