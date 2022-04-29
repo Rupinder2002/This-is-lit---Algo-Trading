@@ -61,8 +61,10 @@ socket_opened = False
 
 def event_handler_quote_update(message):
     
-    ticks[message['instrument'].symbol] = {"LTP": message["ltp"],
+    ticks[message['instrument'].symbol] = {"LTP": message["best_bid_price"],
                                            "Volume": message["volume"]}
+    
+    print(ticks)
     
 def open_callback():
     global socket_opened

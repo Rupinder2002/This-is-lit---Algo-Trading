@@ -1,20 +1,16 @@
-from IPython import get_ipython
-get_ipython().magic('reset -sf') 
-
 import requests
 from alice_blue import AliceBlue,LiveFeedType
 import datetime as dt
 import pandas as pd
 import os
-import pandas_ta as ta
 import time
 import csv
 import sys
 
-#os.chdir('C:/Users/naman/OneDrive - PangeaTech/Desktop/Algo Trading/Aliceblue')
+#os.chdir('C:/Users/naman/OneDrive - PangeaTech/Desktop/Algo Trading/Aliceblue/Credentials')
 cwd = os.getcwd()
 
-strategy_name = 'Bullish ADX with Supertrend'
+strategy_name = 'Mean Reversion Long Option Trading'
 
 # =============================================================================
 # Send Alerts on Telegram (DE Functions)
@@ -29,7 +25,7 @@ def telegram_bot_sendmessage(message):
     requests.get(send_message)
 
 telegram_bot_sendmessage(message = '------New Trading Session Started------')
-#telegram_bot_sendmessage(message = 'Strategy Running Today: ' + strategy_name)
+telegram_bot_sendmessage(message = 'Strategy Running Today: ' + strategy_name)
 
 def write_rows_csv(row):
   with open (filename, "a", newline = "") as csvfile:
@@ -43,18 +39,16 @@ def write_rows_csv(row):
 interval = "5_MIN"   # ["DAY", "1_HR", "3_HR", "1_MIN", "5_MIN", "15_MIN", "60_MIN"]
 ticks = {}
 
-#NSE_SCRIPT_LIST = ['SBIN', 'HDFC']
-# CDS_SCRIPT_LIST = ['USDINR FEB FUT']
-
-username = open('Credentials/alice_username.txt','r').read()
-password = open('Credentials/alice_pwd.txt','r').read()
-twoFA = open('Credentials/alice_twoFA.txt','r').read()
-api_key = open('Credentials/api_key_alice.txt','r').read()
-api_secret = open('Credentials/api_secret_alice.txt','r').read()
+username = open('alice_username.txt','r').read()
+password = open('alice_pwd.txt','r').read()
+twoFA = open('alice_twoFA.txt','r').read()
+api_key = open('api_key_alice.txt','r').read()
+api_secret = open('api_secret_alice.txt','r').read()
 socket_opened = False
 
 def event_handler_quote_update(message):
     ticks[message['instrument'].symbol] = {"LTP": message["best_bid_price"],
+                                           "best_ask_price": message["best_ask_price"],
                                            "Volume": message["volume"]}
     
 def open_callback():
@@ -75,10 +69,9 @@ def login():
     return alice
 
 def subscribe_to_live_feed(alice,exchange,ticker_list):
-    global exit_signal
+
     for script in ticker_list:
         alice.subscribe(alice.get_instrument_by_symbol(exchange, script), LiveFeedType.MARKET_DATA)
-        exit_signal[script] = None
 
     return alice
     
@@ -112,119 +105,106 @@ def fetchOHLC(instrument, days, interval, indices=False):
     
     return df
 
+def closest(lst, K):
+    return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K))]
 
 def get_nfo_scripts(exchange,underlying_ticker):
-    
-    open_price = fetchOHLC(alice.get_instrument_by_symbol(exchange,underlying_ticker),1,'DAY',indices = True)['open'].values[0]
-    strike_price = round(open_price,-2)
-    s1 = strike_price + 500
-    s2 = strike_price - 500
-    
-    nfo = []
-    if exchange == 'NSE':
-        instruments = alice.search_instruments('NFO','BANKNIFTY')
         
+    if 'NIFTY' in underlying_ticker.upper():
+        index = True
+    else:
+        index = False
+        
+    if underlying_ticker == 'BANKNIFTY':
+        underlying_ticker_ = 'Nifty Bank'
+    elif underlying_ticker == 'NIFTY':
+        underlying_ticker_ = 'Nifty 50'
+    else:
+        underlying_ticker_ = underlying_ticker
+        
+    df = fetchOHLC(alice.get_instrument_by_symbol(exchange,underlying_ticker_ ),5,'1_MIN',indices = index)
+
+    except_today = df[df.index.date !=  dt.datetime.now().date()]
+    max_date = max(except_today.index.date)
+
+    last_day_data = except_today[except_today.index.date ==  max_date]
+    
+    open_price = df[df.index.time == pd.to_datetime('9:15').time()]['open'][-1]
+    
+    close_avg = last_day_data['close'].mean()
+    
+    open_price = df[df.index.time == pd.to_datetime('9:15').time()]['open'][-1]
+    
+    if open_price > close_avg:
+        is_CE = False
+    elif open_price < close_avg:
+        is_CE = True
+        
+    if exchange == 'NSE':
+        instruments = alice.search_instruments('NFO',underlying_ticker)
+
+    expiry = []
+    strike_prices = []
     for instrument in instruments:
-        if ((str(s1) in instrument.symbol) | (str(s2) in instrument.symbol)) and instrument.expiry.month  == 4:
-            nfo.append(instrument.symbol)
+        if 'FUT' not in instrument.symbol:
+            expiry.append(instrument.expiry)
+            strike_prices.append(round(int(instrument.symbol.split(' ')[2].split('.')[0]),-1))
             
-    return nfo
+    strike = closest(strike_prices,close_avg)
+    expiry = min(set(expiry))
+    
+    nfo = alice.get_instrument_for_fno(underlying_ticker, expiry, is_fut = False, strike = strike, is_CE = is_CE, exchange = 'NFO')
+             
+    return nfo.symbol,close_avg
 
 
-def strategy(ohlc,ticker):
-
-    global exit_signal
-    
-    ohlc['ADX_14'] = ta.adx(ohlc['high'], ohlc['low'], ohlc['close'])['ADX_14']
-    ohlc[['DMP','DMN']] = ta.dm(ohlc['high'], ohlc['low'])
-    ohlc[['ADX_lc','DMP_lc','DMN_lc']] = ohlc[['ADX_14','DMP','DMN']].shift(1)
-    
-    #ohlc.loc[(ohlc['ADX_14'] > ohlc['DMN']) & (ohlc['ADX_lc'] <= ohlc['DMN_lc']),'ADX_Signal'] = 'buy'
-    ohlc.loc[(ohlc['ADX_14'] > ohlc['DMN']),'ADX_Signal'] = 'buy'
-    ohlc['ST_Signal'] = ta.supertrend(ohlc['high'], ohlc['low'], ohlc['close'],length = 7, multiplier=3)['SUPERTd_7_3.0']
-
-    ohlc.loc[(ohlc['ADX_Signal'] == 'buy') & (ohlc['ST_Signal'] == 1), 'signal'] = 'buy'
-    
-    last_candle = ohlc.iloc[-1]
-    
-    #if last_candle['DMP'] > last_candle['DMN'] and last_candle['DMP_lc'] < last_candle['DMN_lc']:
-    if last_candle['DMP'] > last_candle['DMN']:
-        exit_signal[ticker] = 'sell'
-    
-    ohlc = ohlc[['open','high','low','close','volume','signal']]
-    
-    return ohlc
-
-def run_strategy(ticker_list, exchange, sl_pct = 0.2,quantity = 25):
+def run_strategy(ticker_list, exchange, sl_pct = 0.25):
 
     global ord_df
     global active_tickers
     global time_elapsed
     global ticks
-    global all_positions
-    
-    a = 0
-    while a < 10:
-        try:
-            all_positions = pd.DataFrame(alice.get_daywise_positions())
-            break
-        except:
-            telegram_bot_sendmessage("can't extract position data..retrying")
-            a+=1
+    global previous_buy
     
     start_time = time.time()
     
-    for ticker in ticker_list:
-            
-        print(ticker)
-        
-        if 'NIFTY' in ticker:
-            indices = True
-        else:
-            indices = False
-        
+    for underlying_ticker in ticker_list:
+        ticker = ticker_list[underlying_ticker]
         try:
-            
-            instrument = alice.get_instrument_by_symbol(exchange, ticker)
-            ohlc = fetchOHLC(instrument, 10, interval, indices)
-            
-            ohlc = strategy(ohlc, ticker)
-            
             price = ticks[ticker]['LTP']
-            ticker_signal = ohlc.iloc[-1]['signal']
+            #price_underlying = fetchOHLC(alice.get_instrument_by_symbol('NSE',underlying_ticker),5,'5_MIN')['close'][-1]
             
-            if dt.datetime.now().time() < dt.time(14,1):
+            if dt.datetime.now().time() < dt.time(15,1):
 
-                if ticker not in active_tickers and ticker_signal == 'buy':
+                if ticker not in active_tickers and previous_buy[ticker] == False:
     
                     #placeOrder(ticker, ticker_signal, quantity)
-                    reason = 'Both Indicators show green'
+                    reason = 'Price should reverse back to mean'
                     sl = price * (1 - sl_pct)
                     trade = pd.DataFrame([[dt.datetime.now(),ticker,price,sl,'buy',reason]],columns = ord_df.columns)
                     ord_df = pd.concat([ord_df,trade])
                     active_tickers.append(ticker)
                     write_rows_csv(row = trade.iloc[0].tolist())
+                    previous_buy[ticker] = True
                     telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                 
-                elif ticker in active_tickers and exit_signal[ticker] == 'sell':
+                # elif ticker in active_tickers and ((price_underlying > close_avg_dict[underlying_ticker] and 'CE' in ticker) | 
+                #                                    (price_underlying < close_avg_dict[underlying_ticker] and 'PE' in ticker)):
                     
-                    #placeOrder(ticker, 'sell', quantity)
-                    reason = 'Exit'
-                    trade = pd.DataFrame([[dt.datetime.now(),ticker,price,None,'buy',reason]],columns = ord_df.columns)
-                    ord_df = pd.concat([ord_df,trade])
-                    active_tickers.remove(ticker)
-                    write_rows_csv(row = trade.iloc[0].tolist())
-                    telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
+                #     #placeOrder(ticker, 'sell', quantity)
+                #     reason = 'Exit'
+                #     trade = pd.DataFrame([[dt.datetime.now(),ticker,price,None,'sell',reason]],columns = ord_df.columns)
+                #     ord_df = pd.concat([ord_df,trade])
+                #     active_tickers.remove(ticker)
+                #     write_rows_csv(row = trade.iloc[0].tolist())
+                #     telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                     
-        except Exception as e:
-            try :
-                print(e)
-            except:
-                telegram_bot_sendmessage("API error for ticker : " + ticker)
+        except:
+            telegram_bot_sendmessage("API error for ticker : " + ticker)
      
     time_elapsed = time.time() - start_time
 
-def place_sl_target_order(ticks, target_pct = 0.5, quantity = 25):
+def place_sl_target_order(ticks, target_pct = 0.5):
     
     global active_tickers
     global ord_df
@@ -237,20 +217,20 @@ def place_sl_target_order(ticks, target_pct = 0.5, quantity = 25):
             tick_ltp = ticks[ticker]['LTP']
             
             if ticker in active_tickers:
-                
+
                 last_trade = ord_df[(ord_df["tradingsymbol"]==ticker)].iloc[-1]
                 stop_loss = ord_df[(ord_df["tradingsymbol"]==ticker)].iloc[-1]['SL']
                 price = ord_df[ord_df["tradingsymbol"]==ticker]["price"].values[0]
 
-                if dt.datetime.now().hour == 15 and dt.datetime.now().minute == 14 and last_trade['Order'] == 'buy':
+                if dt.datetime.now().hour == 15 and dt.datetime.now().minute == 9 and last_trade['Order'] == 'buy':
                         
                     #placeOrder(ticker, 'sell', quantity)
-                    reason = '3:14 Exit'
+                    reason = '3:09 Exit'
                     trade = pd.DataFrame([[dt.datetime.now(),ticker,tick_ltp,None,'sell',reason]],columns = ord_df.columns)
                     ord_df = pd.concat([ord_df,trade])
                     active_tickers.remove(ticker)
                     write_rows_csv(row = trade.iloc[0].tolist())
-                    telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
+                    #telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                     
                 elif last_trade['Order'] == 'buy' and tick_ltp <= stop_loss:
                     
@@ -273,11 +253,8 @@ def place_sl_target_order(ticks, target_pct = 0.5, quantity = 25):
                     telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                     
         except Exception as e:
-            try:
-                print(e)
-            except:
-                telegram_bot_sendmessage('Error in Place SL Target Order Function')
-            pass               
+            print(e)               
+
 
 def on_ticks(ticks,ticker_list, exchange):
     global start_minute
@@ -293,7 +270,6 @@ def on_ticks(ticks,ticker_list, exchange):
 
 ord_df = pd.DataFrame(columns = ['timestamp','tradingsymbol','price', 'SL','Order','Reason'])
 active_tickers = []
-exit_signal = {}
 
 # =============================================================================
 # Initinalize variables
@@ -315,8 +291,25 @@ with open (filename, "w", newline="") as csvfile:
 # =============================================================================
 
 alice = login()
-NFO_SCRIPT_LIST = get_nfo_scripts('NSE','Nifty Bank')
-alice = subscribe_to_live_feed(alice, 'NFO', NFO_SCRIPT_LIST)
+
+scrips = ['ADANIPORTS','APOLLOHOSP','ASIANPAINT','AXISBANK','BAJAJ-AUTO','BAJFINANCE',
+          'BPCL','BHARTIARTL','BRITANNIA','CIPLA','COALINDIA','DIVISLAB',
+          'DRREDDY','EICHERMOT','GRASIM','HCLTECH','HDFCBANK','HEROMOTOCO',
+          'HINDUNILVR','ICICIBANK','ITC','INFY','JSWSTEEL',
+          'KOTAKBANK','M&M','MARUTI','NESTLEIND','ONGC','POWERGRID','RELIANCE',
+          'SBILIFE','SHREECEM','SUNPHARMA','TCS','TATAMOTORS',
+          'TECHM','TITAN','UPL','ULTRACEMCO','WIPRO']
+
+nfo_scrips_dict = {}
+close_avg_dict = {}
+for scrip in scrips:
+    detail = get_nfo_scripts('NSE',underlying_ticker=scrip)
+    nfo_scrips_dict[scrip] = detail[0]
+    close_avg_dict[scrip] = detail[1]
+
+nfo_scrips_list = sorted(set(list(nfo_scrips_dict.values())))
+
+alice = subscribe_to_live_feed(alice, 'NFO', nfo_scrips_list)
 time.sleep(30)
 
 # =============================================================================
@@ -325,10 +318,16 @@ time.sleep(30)
 
 start_minute = dt.datetime.now().minute
 
+previous_buy = {}
+for i in nfo_scrips_dict:
+    previous_buy[nfo_scrips_dict[i]] = False
+
+run_strategy(ticker_list = nfo_scrips_dict,exchange = 'NFO')
+
 while True:
     now = dt.datetime.now()
-    if now.hour >= 9 and now.time() <= dt.time(15,14):
-        on_ticks(ticks,NFO_SCRIPT_LIST,'NFO')
+    if now.time() >= dt.time(9,15) and now.time() <= dt.time(15,14):
+        on_ticks(ticks,nfo_scrips_dict,'NFO')
     if now.time() >= dt.time(15,14):
         sys.exit()
 

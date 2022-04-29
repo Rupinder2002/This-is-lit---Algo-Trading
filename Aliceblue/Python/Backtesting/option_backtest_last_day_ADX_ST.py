@@ -32,14 +32,12 @@ def strategy(ohlc):
     ohlc[['DMP','DMN']] = ta.dm(ohlc['high'], ohlc['low'])
     ohlc[['ADX_lc','DMP_lc','DMN_lc']] = ohlc[['ADX_14','DMP','DMN']].shift(1)
     
-    #ohlc.loc[(ohlc['ADX_14'] > ohlc['DMN']) & (ohlc['ADX_lc'] <= ohlc['DMN_lc']),'ADX_Signal'] = 'buy'
-    ohlc.loc[(ohlc['ADX_14'] > ohlc['DMN']),'ADX_Signal'] = 'buy'
+    ohlc.loc[(ohlc['ADX_14'] > ohlc['DMN']) & (ohlc['ADX_lc'] <= ohlc['DMN_lc']),'ADX_Signal'] = 'buy'
     ohlc['ST_Signal'] = ta.supertrend(ohlc['high'], ohlc['low'], ohlc['close'],length = 7, multiplier=3)['SUPERTd_7_3.0']
 
     ohlc.loc[(ohlc['ADX_Signal'] == 'buy') & (ohlc['ST_Signal'] == 1), 'signal'] = 'buy'
     
-    #if last_candle['DMP'] > last_candle['DMN'] and last_candle['DMP_lc'] < last_candle['DMN_lc']:
-    ohlc.loc[ohlc['DMP'] > ohlc['DMN'],'exit_signal'] = 'sell'    
+    ohlc.loc[(ohlc['DMP'] > ohlc['DMN']) & (ohlc['DMP_lc'] < ohlc['DMN_lc']),'exit_signal'] = 'sell'    
     ohlc = ohlc[['ticker','date','open','high','low','close','volume','signal','exit_signal']]
     ohlc['next_open'] = ohlc['open'].shift(-1)
 
@@ -154,13 +152,16 @@ active_tickers = []
 # Set to run the strategy
 # =============================================================================
 
-min_date = pd.to_datetime('2022-04-13')
+min_date = pd.to_datetime('2022-04-26')
 start_date = min_date.date()
 max_date = pd.to_datetime(ohlc.index.max())
 
 while start_date <= max_date.date():
     print(start_date)
+    previous_buy = {}
+
     for ticker in tickers:
+        previous_buy[ticker] = False
         #print(ticker)
         data = ticker_df[(ticker_df['date'] == start_date) & (ticker_df['ticker'] == ticker)]
         if len(data)>0:
@@ -186,7 +187,7 @@ trade_df = ord_df1[(ord_df1['Order']!='Modify')].reset_index(drop = True)
 trade_df.loc[trade_df['Order'] == 'buy','new_price'] = -1 * trade_df['price']
 trade_df.loc[trade_df['Order'] == 'sell','new_price'] = 1 * trade_df['price']
 trade_df['ltp'] = trade_df.groupby('tradingsymbol')['new_price'].shift(1)
-trade_df['pnl'] = (trade_df['ltp'] + trade_df['new_price']) * 25
+trade_df['pnl'] = (trade_df['ltp'] + trade_df['new_price'])
 trade_df = trade_df[~trade_df['Reason'].str.contains('show')]
 
 trade_df['Date'] = trade_df['timestamp'].dt.date
@@ -208,17 +209,17 @@ for ticker in tickers:
         
         average_price = abs(ticker_trade_df['ltp'].mean())
         
-        total_profit = round(sum(ticker_trade_df['pnl']),2)
+        total_profit = round(sum(ticker_trade_df['pnl'] * 25),2)
         pnl_pct = round(sum(ticker_trade_df['pnl'])/average_price * 100,2)
         no_of_signals = len(ticker_trade_df)
         no_of_wins = len(ticker_trade_df[ticker_trade_df['pnl']>0])
         no_of_losses = len(ticker_trade_df[ticker_trade_df['pnl']<0])
         winning_streak = int(max(ticker_trade_df['cum_streak']))
         losing_streak = int(min(ticker_trade_df['cum_streak']))
-        max_gain = round(max(ticker_trade_df['pnl']),2)
-        max_loss = round(min(ticker_trade_df['pnl']),2)
-        avg_gain_per_win = round(ticker_trade_df[ticker_trade_df['pnl'] > 0]['pnl'].mean(),2)
-        avg_loss_per_win = round(ticker_trade_df[ticker_trade_df['pnl'] < 0]['pnl'].mean(),2)
+        max_gain = round(max(ticker_trade_df['pnl'] * 25),2)
+        max_loss = round(min(ticker_trade_df['pnl'] * 25),2)
+        avg_gain_per_win = round(ticker_trade_df[ticker_trade_df['pnl'] > 0]['pnl'].mean() * 25,2)
+        avg_loss_per_win = round(ticker_trade_df[ticker_trade_df['pnl'] < 0]['pnl'].mean() * 25,2)
         
         ticker_summary = pd.DataFrame([[ticker,total_profit,pnl_pct,no_of_signals,no_of_wins,
                                        no_of_losses,winning_streak,losing_streak,max_gain,
@@ -229,4 +230,4 @@ for ticker in tickers:
 
 
 print('Total Profit: ',sum(summary['Total Profit']))
-print('Total Profit Per Day: \n',trade_df.groupby('Date')['pnl'].sum())
+print('Total Profit Per Day: \n',trade_df.groupby('Date')['pnl'].sum() * 25)
