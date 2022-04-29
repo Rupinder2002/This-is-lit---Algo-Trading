@@ -12,7 +12,6 @@ import numpy as np
 import datetime as dt
 import os
 import time
-import pandas_ta as ta
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -26,24 +25,7 @@ strategy_name = 'BANKNIFTY ADX ST StochRSI'
 # Create function to implement the strategy
 # =============================================================================
 
-def strategy(ohlc):
-    
-    ohlc['ADX_14'] = ta.adx(ohlc['high'], ohlc['low'], ohlc['close'])['ADX_14']
-    ohlc[['DMP','DMN']] = ta.dm(ohlc['high'], ohlc['low'])
-    ohlc[['ADX_lc','DMP_lc','DMN_lc']] = ohlc[['ADX_14','DMP','DMN']].shift(1)
-    
-    ohlc.loc[(ohlc['ADX_14'] > ohlc['DMN']) & (ohlc['ADX_lc'] <= ohlc['DMN_lc']),'ADX_Signal'] = 'buy'
-    ohlc['ST_Signal'] = ta.supertrend(ohlc['high'], ohlc['low'], ohlc['close'],length = 7, multiplier=3)['SUPERTd_7_3.0']
-
-    ohlc.loc[(ohlc['ADX_Signal'] == 'buy') & (ohlc['ST_Signal'] == 1), 'signal'] = 'buy'
-    
-    ohlc.loc[(ohlc['DMP'] > ohlc['DMN']) & (ohlc['DMP_lc'] < ohlc['DMN_lc']),'exit_signal'] = 'sell'    
-    ohlc = ohlc[['ticker','date','open','high','low','close','volume','signal','exit_signal']]
-    ohlc['next_open'] = ohlc['open'].shift(-1)
-
-    return ohlc
-
-def run_strategy(row,ticker,sl_pct = 0.2):
+def run_strategy(row,ticker,sl_pct = 0.25):
     
     global ord_df
     global active_tickers
@@ -51,24 +33,28 @@ def run_strategy(row,ticker,sl_pct = 0.2):
     
     start_time = time.time()
     
-    ticker_signal = row['signal']
     price = row['next_open']
+    close_avg = row['close_avg']
+    price_underlying = row['close_underlying']
 
-    if ticker not in active_tickers:
+    if row.name.time() <= dt.time(15,13):
 
-        if ticker_signal == 'buy' and row.name.time() >= dt.time(9,15) and row.name.time() < dt.time(14,0):
+        if ticker not in active_tickers and previous_buy[ticker] == False:
+    
             reason = 'Both Indicators show green'
             #sl = ohlc['low'][-1] - sl_price(ohlc)
             sl = row['next_open'] * (1 - sl_pct)
             trade = pd.DataFrame([[row.name,ticker,price,sl,'buy',reason]],columns = ord_df.columns)
             ord_df = pd.concat([ord_df,trade])
             active_tickers.append(ticker)
-            
-        elif ticker in active_tickers and row.exit_signal == 'sell':
-            
+            previous_buy[ticker] = True
+                
+        elif ticker in active_tickers and ((price_underlying > close_avg and 'CE' in ticker) | 
+                                           (price_underlying < close_avg and 'PE' in ticker)):
+                
             #placeOrder(ticker, 'sell', quantity)
             reason = 'Exit'
-            trade = pd.DataFrame([[dt.datetime.now(),ticker,price,None,'buy',reason]],columns = ord_df.columns)
+            trade = pd.DataFrame([[row.name,ticker,price,None,'sell',reason]],columns = ord_df.columns)
             ord_df = pd.concat([ord_df,trade])
             active_tickers.remove(ticker)
 
@@ -115,7 +101,7 @@ historical_df = pd.read_csv('Option Minute Data.csv')
 
 #ticks = historical_df[historical_df['ticker'].isin(['INFY','RELIANCE'])]
 ticks = historical_df.copy()
-ticks = ticks[['timestamp','open','high','low','close','volume','ticker']]
+ticks = ticks[['timestamp','open','high','low','close','volume','ticker','lot_size','underlying_ticker','close_avg','close_underlying']]
 ticks['timestamp'] = pd.to_datetime(ticks['timestamp'])
 ticks['date'] = pd.to_datetime(ticks['timestamp'],dayfirst=True).dt.date
 ticks['time'] = pd.to_datetime(ticks['timestamp']).dt.time
@@ -125,26 +111,31 @@ ticks.set_index('timestamp',inplace = True)
 # Resample Data
 # =============================================================================
 
-ohlc = ticks.groupby('ticker').resample('5min').agg({'open' : ['first'] , 'high' : ['max'] ,'low' : ['min'] ,'close' : ['last'], 'volume' : ['sum']})  #check if M is minutes or months
-ohlc.columns = ['open','high','low','close','volume']
+ohlc = ticks.groupby('ticker').resample('5min').agg({'open' : ['first'] , 'high' : ['max'] ,
+                                                     'low' : ['min'] ,'close' : ['last'], 
+                                                     'volume' : ['sum'], 'close_underlying' : ['last'], 
+                                                     'close_avg' : ['last'], 'lot_size' : ['first']})
+
+ohlc.columns = ['open','high','low','close','volume','close_underlying','close_avg','lot_size']
 ohlc.loc[ohlc['volume'] == 0,'volume'] = np.nan
 ohlc.dropna(how = 'all',inplace = True)
 ohlc = ohlc.reset_index()
 ohlc['date'] = ohlc['timestamp'].dt.date
 ohlc = ohlc.set_index('timestamp')
 ohlc['volume'] = ohlc['volume'].fillna(0)
+ohlc['next_open'] = ohlc.groupby('ticker')['open'].shift(-1)
 
-ticker_df = pd.DataFrame(columns=['ticker','date','open','high','low','close','volume','signal','exit_signal','next_open'])
+ticker_df = ohlc
 tickers = sorted(ticks['ticker'].drop_duplicates().values.tolist())
 
 # =============================================================================
 # Apply Strategy
 # =============================================================================
 
-for ticker in tickers:
-    print(ticker)
-    a = ohlc[ohlc['ticker'] == ticker]
-    ticker_df = ticker_df.append(strategy(a))
+# for ticker in tickers:
+#     print(ticker)
+#     a = ohlc[ohlc['ticker'] == ticker]
+#     ticker_df = ticker_df.append(strategy(a))
 
 active_tickers = []
 
@@ -152,7 +143,7 @@ active_tickers = []
 # Set to run the strategy
 # =============================================================================
 
-min_date = pd.to_datetime('2022-04-26')
+min_date = pd.to_datetime('2022-04-28')
 start_date = min_date.date()
 max_date = pd.to_datetime(ohlc.index.max())
 
@@ -182,7 +173,12 @@ while start_date <= max_date.date():
 ads = ord_df[ord_df['Order']!='Modify']
 print(ads.Reason.value_counts())
 
+lot_df = ohlc[['ticker','lot_size']].reset_index(drop = True).drop_duplicates().reset_index(drop = True)
+
 ord_df1 = ord_df.reset_index(drop = True)
+ord_df1 = ord_df1.merge(lot_df,left_on = 'tradingsymbol',right_on = 'ticker')
+ord_df1 = ord_df1.drop('ticker',axis = 1)
+
 trade_df = ord_df1[(ord_df1['Order']!='Modify')].reset_index(drop = True)
 trade_df.loc[trade_df['Order'] == 'buy','new_price'] = -1 * trade_df['price']
 trade_df.loc[trade_df['Order'] == 'sell','new_price'] = 1 * trade_df['price']
@@ -209,17 +205,17 @@ for ticker in tickers:
         
         average_price = abs(ticker_trade_df['ltp'].mean())
         
-        total_profit = round(sum(ticker_trade_df['pnl'] * 25),2)
+        total_profit = round(sum(ticker_trade_df['pnl'] * ticker_trade_df['lot_size']),2)
         pnl_pct = round(sum(ticker_trade_df['pnl'])/average_price * 100,2)
         no_of_signals = len(ticker_trade_df)
         no_of_wins = len(ticker_trade_df[ticker_trade_df['pnl']>0])
         no_of_losses = len(ticker_trade_df[ticker_trade_df['pnl']<0])
         winning_streak = int(max(ticker_trade_df['cum_streak']))
         losing_streak = int(min(ticker_trade_df['cum_streak']))
-        max_gain = round(max(ticker_trade_df['pnl'] * 25),2)
-        max_loss = round(min(ticker_trade_df['pnl'] * 25),2)
-        avg_gain_per_win = round(ticker_trade_df[ticker_trade_df['pnl'] > 0]['pnl'].mean() * 25,2)
-        avg_loss_per_win = round(ticker_trade_df[ticker_trade_df['pnl'] < 0]['pnl'].mean() * 25,2)
+        max_gain = round(max(ticker_trade_df['pnl'] * ticker_trade_df['lot_size']),2)
+        max_loss = round(min(ticker_trade_df['pnl'] * ticker_trade_df['lot_size']),2)
+        avg_gain_per_win = round((ticker_trade_df[ticker_trade_df['pnl'] > 0]['pnl'] * ticker_trade_df[ticker_trade_df['pnl'] > 0]['lot_size']).mean(),2)
+        avg_loss_per_win = round((ticker_trade_df[ticker_trade_df['pnl'] < 0]['pnl'] * ticker_trade_df[ticker_trade_df['pnl'] < 0]['lot_size']).mean(),2)
         
         ticker_summary = pd.DataFrame([[ticker,total_profit,pnl_pct,no_of_signals,no_of_wins,
                                        no_of_losses,winning_streak,losing_streak,max_gain,
@@ -230,4 +226,9 @@ for ticker in tickers:
 
 
 print('Total Profit: ',sum(summary['Total Profit']))
-print('Total Profit Per Day: \n',trade_df.groupby('Date')['pnl'].sum() * 25)
+trade_df['Total_Profit_Per_Lot'] = trade_df['pnl'] * trade_df['lot_size']
+trade_df['Total_Cost_Per_Lot'] = trade_df['price'] * trade_df['lot_size']
+print('Total Profit Per Day: \n',trade_df.groupby('Date')['Total_Profit_Per_Lot'].sum())
+print('Total Cost Per Day: \n',trade_df.groupby('Date')['Total_Cost_Per_Lot'].sum())
+print('Total Profit % Per Day: \n',trade_df.groupby('Date')['Total_Profit_Per_Lot'].sum()/trade_df.groupby('Date')['Total_Cost_Per_Lot'].sum())
+print('Total Profit %: \n',trade_df['Total_Profit_Per_Lot'].sum()/trade_df['Total_Cost_Per_Lot'].sum())

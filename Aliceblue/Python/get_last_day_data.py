@@ -65,57 +65,120 @@ def fetchOHLC(instrument, days, to_datetime, interval, indices=False):
     
     return df
 
+
+def closest(lst, K):
+    return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K))]
+
 def get_nfo_scripts(exchange,underlying_ticker,to_datetime):
-    
-    open_price = fetchOHLC(alice.get_instrument_by_symbol(exchange,underlying_ticker),1,to_datetime,'DAY',indices = True)['open'].values[0]
-    strike_price = round(open_price,-2)
-    s1 = strike_price + 500
-    s2 = strike_price - 500
-    s3 = strike_price + 300
-    s4 = strike_price - 300
-    s5 = strike_price + 700
-    s6 = strike_price - 700
-    
-    nfo = []
-    if exchange == 'NSE':
-        instruments = alice.search_instruments('NFO','BANKNIFTY')
         
+    if 'NIFTY' in underlying_ticker.upper():
+        index = True
+    else:
+        index = False
+        
+    if underlying_ticker == 'BANKNIFTY':
+        underlying_ticker_ = 'Nifty Bank'
+    elif underlying_ticker == 'NIFTY':
+        underlying_ticker_ = 'Nifty 50'
+    else:
+        underlying_ticker_ = underlying_ticker
+        
+    df = fetchOHLC(alice.get_instrument_by_symbol(exchange,underlying_ticker_),5,to_datetime,'1_MIN',indices = index)
+
+    except_today = df[df.index.date !=  dt.datetime.now().date()]
+    max_date = max(except_today.index.date)
+
+    last_day_data = except_today[except_today.index.date ==  max_date]
+
+    close_avg = last_day_data['close'].mean()
+    
+    open_price = df[df.index.time == pd.to_datetime('9:15').time()]['open'][-1]
+    
+    if open_price > close_avg:
+        is_CE = False
+    elif open_price < close_avg:
+        is_CE = True
+        
+    if exchange == 'NSE':
+        instruments = alice.search_instruments('NFO',underlying_ticker)
+
+    expiry = []
+    strike_prices = []
     for instrument in instruments:
-        if ((str(s1) in instrument.symbol) | (str(s2) in instrument.symbol) |
-            (str(s3) in instrument.symbol) | (str(s4) in instrument.symbol) |
-            (str(s5) in instrument.symbol) | (str(s6) in instrument.symbol)) and instrument.expiry.month  == 4:
-            nfo.append(instrument.symbol)
+        if 'FUT' not in instrument.symbol:
+            expiry.append(instrument.expiry)
+            strike_prices.append(round(int(instrument.symbol.split(' ')[2].split('.')[0]),-1))
             
-    return nfo
+    strike = closest(strike_prices,close_avg)
+    expiry = min(set(expiry))
+    
+    nfo = alice.get_instrument_for_fno(underlying_ticker, expiry, is_fut = False, strike = strike, is_CE = is_CE, exchange = 'NFO')
+           
+    return nfo.symbol,close_avg,int(nfo.lot_size)
 
 alice = login()
 ohlc = pd.DataFrame()
 
-start_date = pd.to_datetime('2022-04-13')
-max_date = pd.to_datetime('2022-04-23')
+start_date = pd.to_datetime('2022-04-27')
+max_date = pd.to_datetime('2022-04-29')
+scrips = ['ADANIPORTS','APOLLOHOSP','ASIANPAINT','AXISBANK','BAJAJ-AUTO','BAJFINANCE',
+          'BPCL','BHARTIARTL','BRITANNIA','CIPLA','COALINDIA','DIVISLAB',
+          'DRREDDY','EICHERMOT','GRASIM','HCLTECH','HDFCBANK','HEROMOTOCO',
+          'HINDUNILVR','ICICIBANK','ITC','INFY','JSWSTEEL',
+          'KOTAKBANK','M&M','MARUTI','NESTLEIND','ONGC','POWERGRID','RELIANCE',
+          'SBILIFE','SHREECEM','SUNPHARMA','TCS','TATAMOTORS',
+          'TECHM','TITAN','UPL','ULTRACEMCO','WIPRO']
+
+nfo_scrips_dict = {}
+close_avg_dict = {}
+lot_size_dict = {}
 
 while start_date <= max_date:
+    print('\n')
     print(start_date)
+    print('Data Extracting for: \n')
+    
     try:
-        NFO_SCRIP_LIST = get_nfo_scripts(exchange = 'NSE',underlying_ticker = 'Nifty Bank', to_datetime = start_date)
+        for scrip in scrips:
             
-        for nfo_scrip in NFO_SCRIP_LIST:
-            print(nfo_scrip)
-            instrument = alice.get_instrument_by_symbol('NFO', nfo_scrip)
-            df = fetchOHLC(instrument, 1, start_date, interval)
-            df['date_'] = df.index.date
-            total_vol = df.groupby('date_',as_index = False)['volume'].sum()
-            total_vol = total_vol[total_vol['volume']>100000]
-            df = df[df['date_'].isin(total_vol['date_'].tolist())]
-            df = df.drop('date_',axis = 1)
-            df['ticker'] = nfo_scrip
-            if len(df) > 0:
-                ohlc = ohlc.append(df)
+            print(scrip)
+            
+            detail = get_nfo_scripts(exchange = 'NSE',underlying_ticker = scrip,to_datetime = start_date)
+
+            if detail[0] != '':
+                
+                nfo_scrips_dict[scrip] = detail[0]
+                close_avg_dict[scrip] = detail[1]
+                lot_size_dict[scrip] = detail[2]
+                
+                instrument = alice.get_instrument_by_symbol('NFO', nfo_scrips_dict[scrip])
+                instrument_underlying = alice.get_instrument_by_symbol('NSE', scrip)
+                try:
+                    df_underlying = fetchOHLC(instrument_underlying, 1, start_date, interval)
+                    df = fetchOHLC(instrument, 1, start_date, interval)
+                except:
+                    pass
+                
+                df['date_'] = df.index.date
+                total_vol = df.groupby('date_',as_index = False)['volume'].sum()
+                total_vol = total_vol[total_vol['volume']>100000]
+                df = df[df['date_'].isin(total_vol['date_'].tolist())]
+                df = df.drop('date_',axis = 1)
+                df['ticker'] = nfo_scrips_dict[scrip]
+                df['lot_size'] = lot_size_dict[scrip]
+                df['underlying_ticker'] = scrip
+                df['close_avg'] = close_avg_dict[scrip]
+                
+                df = df.merge(df_underlying['close'],right_index = True, left_index = True)
+                
+                if len(df) > 0:
+                    ohlc = ohlc.append(df)
     except:
         print('Holiday, Skipping')
             
     start_date = start_date + dt.timedelta(days=1)
 
+
 ohlc = ohlc.reset_index()
-ohlc = ohlc.rename({'date':'timestamp'},axis = 1)
+ohlc = ohlc.rename({'date':'timestamp','close_x':'close','close_y':'close_underlying'},axis = 1)
 ohlc.to_csv('Option Minute Data.csv',index=False)
