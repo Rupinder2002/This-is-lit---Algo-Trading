@@ -34,10 +34,10 @@ def run_strategy(row,ticker,sl_pct = 0.25):
     start_time = time.time()
     
     price = row['next_open']
-    close_avg = row['close_avg']
-    price_underlying = row['close_underlying']
+    # close_avg = row['close_avg']
+    # price_underlying = row['close_underlying']
 
-    if row.name.time() <= dt.time(15,13):
+    if row.name.time() <= dt.time(15,1):
 
         if ticker not in active_tickers and previous_buy[ticker] == False:
     
@@ -49,14 +49,14 @@ def run_strategy(row,ticker,sl_pct = 0.25):
             active_tickers.append(ticker)
             previous_buy[ticker] = True
                 
-        elif ticker in active_tickers and ((price_underlying > close_avg and 'CE' in ticker) | 
-                                           (price_underlying < close_avg and 'PE' in ticker)):
+        # elif ticker in active_tickers and ((price_underlying > close_avg and 'CE' in ticker) | 
+        #                                     (price_underlying < close_avg and 'PE' in ticker)):
                 
-            #placeOrder(ticker, 'sell', quantity)
-            reason = 'Exit'
-            trade = pd.DataFrame([[row.name,ticker,price,None,'sell',reason]],columns = ord_df.columns)
-            ord_df = pd.concat([ord_df,trade])
-            active_tickers.remove(ticker)
+        #     #placeOrder(ticker, 'sell', quantity)
+        #     reason = 'Exit'
+        #     trade = pd.DataFrame([[row.name,ticker,price,None,'sell',reason]],columns = ord_df.columns)
+        #     ord_df = pd.concat([ord_df,trade])
+        #     active_tickers.remove(ticker)
 
     time_elapsed = time.time() - start_time
 
@@ -143,7 +143,7 @@ active_tickers = []
 # Set to run the strategy
 # =============================================================================
 
-min_date = pd.to_datetime('2022-04-28')
+min_date = pd.to_datetime(dt.date.today())
 start_date = min_date.date()
 max_date = pd.to_datetime(ohlc.index.max())
 

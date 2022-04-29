@@ -172,7 +172,7 @@ def run_strategy(ticker_list, exchange, sl_pct = 0.25):
         ticker = ticker_list[underlying_ticker]
         try:
             price = ticks[ticker]['LTP']
-            price_underlying = fetchOHLC(alice.get_instrument_by_symbol('NSE',underlying_ticker),5,'5_MIN')['close'][-1]
+            #price_underlying = fetchOHLC(alice.get_instrument_by_symbol('NSE',underlying_ticker),5,'5_MIN')['close'][-1]
             
             if dt.datetime.now().time() < dt.time(15,1):
 
@@ -188,16 +188,16 @@ def run_strategy(ticker_list, exchange, sl_pct = 0.25):
                     previous_buy[ticker] = True
                     telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                 
-                elif ticker in active_tickers and ((price_underlying > close_avg_dict[underlying_ticker] and 'CE' in ticker) | 
-                                                   (price_underlying < close_avg_dict[underlying_ticker] and 'PE' in ticker)):
+                # elif ticker in active_tickers and ((price_underlying > close_avg_dict[underlying_ticker] and 'CE' in ticker) | 
+                #                                    (price_underlying < close_avg_dict[underlying_ticker] and 'PE' in ticker)):
                     
-                    #placeOrder(ticker, 'sell', quantity)
-                    reason = 'Exit'
-                    trade = pd.DataFrame([[dt.datetime.now(),ticker,price,None,'sell',reason]],columns = ord_df.columns)
-                    ord_df = pd.concat([ord_df,trade])
-                    active_tickers.remove(ticker)
-                    write_rows_csv(row = trade.iloc[0].tolist())
-                    telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
+                #     #placeOrder(ticker, 'sell', quantity)
+                #     reason = 'Exit'
+                #     trade = pd.DataFrame([[dt.datetime.now(),ticker,price,None,'sell',reason]],columns = ord_df.columns)
+                #     ord_df = pd.concat([ord_df,trade])
+                #     active_tickers.remove(ticker)
+                #     write_rows_csv(row = trade.iloc[0].tolist())
+                #     telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                     
         except:
             telegram_bot_sendmessage("API error for ticker : " + ticker)
@@ -222,15 +222,15 @@ def place_sl_target_order(ticks, target_pct = 0.5):
                 stop_loss = ord_df[(ord_df["tradingsymbol"]==ticker)].iloc[-1]['SL']
                 price = ord_df[ord_df["tradingsymbol"]==ticker]["price"].values[0]
 
-                if dt.datetime.now().hour == 15 and dt.datetime.now().minute == 14 and last_trade['Order'] == 'buy':
+                if dt.datetime.now().hour == 15 and dt.datetime.now().minute == 9 and last_trade['Order'] == 'buy':
                         
                     #placeOrder(ticker, 'sell', quantity)
-                    reason = '3:14 Exit'
+                    reason = '3:09 Exit'
                     trade = pd.DataFrame([[dt.datetime.now(),ticker,tick_ltp,None,'sell',reason]],columns = ord_df.columns)
                     ord_df = pd.concat([ord_df,trade])
                     active_tickers.remove(ticker)
                     write_rows_csv(row = trade.iloc[0].tolist())
-                    telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
+                    #telegram_bot_sendmessage(trade[['tradingsymbol','price','Order','Reason']].to_json(orient='records', indent = 1))
                     
                 elif last_trade['Order'] == 'buy' and tick_ltp <= stop_loss:
                     

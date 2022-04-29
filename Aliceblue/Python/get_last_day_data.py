@@ -119,8 +119,8 @@ def get_nfo_scripts(exchange,underlying_ticker,to_datetime):
 alice = login()
 ohlc = pd.DataFrame()
 
-start_date = pd.to_datetime('2022-04-27')
-max_date = pd.to_datetime('2022-04-29')
+start_date = pd.to_datetime(dt.date.today())
+max_date = (start_date + dt.timedelta(days=1)).date()
 scrips = ['ADANIPORTS','APOLLOHOSP','ASIANPAINT','AXISBANK','BAJAJ-AUTO','BAJFINANCE',
           'BPCL','BHARTIARTL','BRITANNIA','CIPLA','COALINDIA','DIVISLAB',
           'DRREDDY','EICHERMOT','GRASIM','HCLTECH','HDFCBANK','HEROMOTOCO',
@@ -157,7 +157,8 @@ while start_date <= max_date:
                     df_underlying = fetchOHLC(instrument_underlying, 1, start_date, interval)
                     df = fetchOHLC(instrument, 1, start_date, interval)
                 except:
-                    pass
+                    print('Passing scrip: ', scrip)
+                    continue
                 
                 df['date_'] = df.index.date
                 total_vol = df.groupby('date_',as_index = False)['volume'].sum()

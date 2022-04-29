@@ -8,6 +8,11 @@ import pandas as pd
 from alice_blue import AliceBlue
 import os
 import requests
+import datetime as dt
+
+#os.chdir('C:/Users/naman/OneDrive - PangeaTech/Desktop/Algo Trading/Aliceblue/Credentials')
+
+strategy_name = 'Mean Reversion Long Option Trading'
 
 def telegram_bot_sendmessage(message):
     bot_token = '5173424624:AAGWIHX1xrGfX8doCYtskOHnxhtxVr1PMCI'
@@ -35,7 +40,8 @@ def login():
 
 alice = login()
 
-ord_df = pd.read_csv('Mean Reversion Long Option Trading Order Book 2022-04-29.csv')
+filename = os.path.join(cwd,strategy_name + ' Order Book ' + str(dt.datetime.now().date()) + '.csv')
+ord_df = pd.read_csv(filename)
 
 tickers = ord_df.tradingsymbol.unique().tolist()
 ticker_lot_size = pd.DataFrame(columns = ['tradingsymbol','lot_size'])
@@ -72,11 +78,36 @@ avg_loss_per_loss = round((trade_df[trade_df['pnl'] < 0]['pnl'] * trade_df[trade
 
 
 trade_df['Total_Profit_Per_Lot'] = trade_df['pnl'] * trade_df['lot_size']
-trade_df['Total_Cost_Per_Lot'] = trade_df['price'] * trade_df['lot_size']
+trade_df['Total_Cost_Per_Lot'] = abs(trade_df['ltp'] * trade_df['lot_size'])
+
+#Brokerage Charges
+brokerage = 20
+stt = 0.05/100
+transcation_charges = 0.053/100
+gst = 18/100
+sebi_charges = 10/10000000
+stamp_charges = 0.003/100
+
+trade_df['brokerage'] = 40
+trade_df['stt'] = trade_df['lot_size'] * trade_df['price'] * stt
+trade_df['transcation_charges'] = (trade_df['Total_Cost_Per_Lot'] + trade_df['lot_size'] * trade_df['price']) * transcation_charges
+trade_df['gst'] = (trade_df['brokerage'] + trade_df['transcation_charges']) * gst
+trade_df['sebi'] =  0.1
+trade_df['stamp_charges'] = trade_df['Total_Cost_Per_Lot'] * stamp_charges
+
+trade_df['total_tax_and_charges'] = trade_df['brokerage'] + trade_df['stt'] + \
+        trade_df['transcation_charges'] + trade_df['gst'] + trade_df['sebi'] + \
+        trade_df['stamp_charges']
+
+trade_df['Total_Profit_After_Tax'] = trade_df['Total_Profit_Per_Lot'] - trade_df['total_tax_and_charges']
+
 telegram_bot_sendmessage('Summary as of: ' + str(trade_df['Date'].iloc[0].strftime('%d %b')) + 
-                         '\nTotal Profit: Rs. ' + str(round(trade_df['Total_Profit_Per_Lot'].sum())) + 
                          '\nTotal Invested: Rs. ' + str(round(trade_df['Total_Cost_Per_Lot'].sum())) + 
+                         '\nTotal Profit: Rs. ' + str(round(trade_df['Total_Profit_Per_Lot'].sum())) + 
+                         '\nTotal Tax and Charges: Rs. ' + str(round(trade_df['total_tax_and_charges'].sum())) + 
+                         '\nTotal Profit After Tax: Rs. ' + str(round(trade_df['Total_Profit_After_Tax'].sum())) + 
                          '\nTotal Profit %: ' + str(100 * round(trade_df['Total_Profit_Per_Lot'].sum()/trade_df['Total_Cost_Per_Lot'].sum(),4)) + '%' + 
+                         '\nTotal After Tax Profit %: ' + str(100 * round(trade_df['Total_Profit_After_Tax'].sum()/trade_df['Total_Cost_Per_Lot'].sum(),4)) + '%' + 
                          '\nTotal Signals: ' + str(no_of_signals) + 
                          '\nTotal Wins: ' + str(no_of_wins) + 
                          '\nTotal Losses: ' + str(no_of_losses) + 
@@ -86,7 +117,6 @@ telegram_bot_sendmessage('Summary as of: ' + str(trade_df['Date'].iloc[0].strfti
                          '\nMax Loss: Rs. ' + str(round(max_loss)) +
                          '\nAvg Gain per win: Rs. ' + str(round(avg_gain_per_win)) +
                          '\nAvg Loss per Loss: Rs. ' + str(round(avg_loss_per_loss)))
-
 
 # summary = pd.DataFrame(columns = ['ticker','Total Profit','PnL%'])
 
