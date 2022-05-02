@@ -172,11 +172,12 @@ def run_strategy(ticker_list, exchange, sl_pct = 0.25):
         ticker = ticker_list[underlying_ticker]
         try:
             price = ticks[ticker]['LTP']
+            volume = ticks[ticker]['Volume']
             #price_underlying = fetchOHLC(alice.get_instrument_by_symbol('NSE',underlying_ticker),5,'5_MIN')['close'][-1]
             
             if dt.datetime.now().time() < dt.time(15,1):
 
-                if ticker not in active_tickers and previous_buy[ticker] == False:
+                if ticker not in active_tickers and previous_buy[ticker] == False and volume >= 10000:
     
                     #placeOrder(ticker, ticker_signal, quantity)
                     reason = 'Price should reverse back to mean'
