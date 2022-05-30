@@ -259,11 +259,11 @@ def place_sl_target_order(ticks, target_pct = 0.5):
 
 def on_ticks(ticks,ticker_list, exchange):
     global start_minute
-    now = dt.datetime.now()    
+    # now = dt.datetime.now()    
     place_sl_target_order(ticks)
-    if abs(now.minute - start_minute) >= 5:
-        start_minute = now.minute
-        run_strategy(ticker_list, exchange)
+    # if abs(now.minute - start_minute) >= 5:
+    #     start_minute = now.minute
+    #     run_strategy(ticker_list, exchange)
 
 # =============================================================================
 # Create DataFrame to store all orders
@@ -311,7 +311,7 @@ for scrip in scrips:
 nfo_scrips_list = sorted(set(list(nfo_scrips_dict.values())))
 
 alice = subscribe_to_live_feed(alice, 'NFO', nfo_scrips_list)
-time.sleep(30)
+time.sleep(45)
 
 # =============================================================================
 # Deploy the startegy to run every 10 mins

@@ -41,7 +41,7 @@ def run_strategy(row,ticker,sl_pct = 0.25):
 
     if row.name.time() <= dt.time(15,1):
 
-        if ticker not in active_tickers and previous_buy[ticker] == False and volume>=100000:
+        if ticker not in active_tickers and previous_buy[ticker] == False and volume>=50000 and row.name.time() <= dt.time(9,20):
 
             reason = 'Price should reverse back to mean'
             #sl = ohlc['low'][-1] - sl_price(ohlc)
@@ -197,8 +197,8 @@ trade_df.loc[trade_df['pnl'] == 0,'streak'] = 0
 no_of_signals = len(trade_df)
 no_of_wins = len(trade_df[trade_df['pnl']>0])
 no_of_losses = len(trade_df[trade_df['pnl']<0])
-max_gain = round(max(trade_df['pnl'] * trade_df['lot_size']),2)
-max_loss = round(min(trade_df['pnl'] * trade_df['lot_size']),2)
+max_gain = round((trade_df[trade_df['pnl'] > 0]['pnl'] * trade_df[trade_df['pnl'] > 0]['lot_size']).max(),2)
+max_loss = round((trade_df[trade_df['pnl'] < 0]['pnl'] * trade_df[trade_df['pnl'] < 0]['lot_size']).min(),2)
 avg_gain_per_win = round((trade_df[trade_df['pnl'] > 0]['pnl'] * trade_df[trade_df['pnl'] > 0]['lot_size']).mean(),2)
 avg_loss_per_loss = round((trade_df[trade_df['pnl'] < 0]['pnl'] * trade_df[trade_df['pnl'] < 0]['lot_size']).mean(),2)
 
@@ -239,10 +239,10 @@ print('Summary as of: ' + str(trade_df['Date'].iloc[0].strftime('%d %b')) +
                          '\nTotal Losses: ' + str(no_of_losses) + 
                          '\nWin Rate: ' + str(round(100 * no_of_wins/no_of_signals,1)) + '%' + 
                          '\nLoss Rate: ' + str(round(100 * no_of_losses/no_of_signals,1)) + '%' + 
-                         '\nMax Gain: Rs. ' + str(round(max_gain)) + 
-                         '\nMax Loss: Rs. ' + str(round(max_loss)) +
-                         '\nAvg Gain per win: Rs. ' + str(round(avg_gain_per_win)) +
-                         '\nAvg Loss per Loss: Rs. ' + str(round(avg_loss_per_loss)))
+                         '\nMax Gain: Rs. ' + str(max_gain) + 
+                         '\nMax Loss: Rs. ' + str(max_loss) +
+                         '\nAvg Gain per win: Rs. ' + str(avg_gain_per_win) +
+                         '\nAvg Loss per Loss: Rs. ' + str(avg_loss_per_loss))
 
 
 # trade_df = ord_df1[(ord_df1['Order']!='Modify')].reset_index(drop = True)
