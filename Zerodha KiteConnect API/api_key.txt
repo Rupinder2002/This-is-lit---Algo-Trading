@@ -1,5 +1,5 @@
-hczjxslcfs4h8fe3
-uo0s87j9pnfnoqt842j2f4k16ysmwegz
-OU4241
-9001788445na
-258025
+access_token
+request_token
+user_name
+password
+pin
