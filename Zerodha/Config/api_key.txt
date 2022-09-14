@@ -1,5 +1,5 @@
-hczjxslcfs4h8fe3
-07rqcmv6nb84bkrdv9ze2uwpvwaeuklu
-OU4241
-9001788445na
-234567
+api_key
+request_token
+user_name
+password
+pin
